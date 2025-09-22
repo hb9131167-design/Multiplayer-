@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe Universe</title>
+    <!-- MQTT Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js"></script>
+    <!-- Google Font for Splash Screen -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #f0f0f0; --text-color: #333; --container-bg: #ffffff;
+            --cell-bg: #fff; --cell-border: #ccc; --cell-hover-bg: #e8e8e8;
+            --button-bg: #007bff; --button-text: #ffffff; --status-text: #444;
+            --info-text: #28a745; --winning-cell-bg: #ffd700;
+            --win-color: #28a745; --lose-color: #dc3545; --draw-color: #6c757d;
+        }
+
+        /* --- THEMES --- */
+        .theme-dark {
+            --bg-color: #121212; --text-color: #e0e0e0; --container-bg: #1e1e1e;
+            --cell-bg: #2a2a2a; --cell-border: #444; --cell-hover-bg: #3a3a3a;
+            --button-bg: #bb86fc; --button-text: #121212; --status-text: #b0b0b0;
+            --info-text: #03dac6; --winning-cell-bg: #bb86fc;
+            --win-color: #03dac6; --lose-color: #cf6679; --draw-color: #a0a0a0;
+        }
+        .theme-light { /* Default theme */ }
+        .theme-forest { --bg-color: #1E352F; --text-color: #F9EBE0; --container-bg: #2A403A; --cell-bg: #F9EBE0; --cell-border: #5A7D7C; --cell-hover-bg: #e0d8cf; --button-bg: #5A7D7C; --button-text: #F9EBE0; --status-text: #F9EBE0; --info-text: #9DD9D2; --winning-cell-bg: #FFC15E;}
+        .theme-ocean { --bg-color: #003B46; --text-color: #E6F5F7; --container-bg: #07575B; --cell-bg: #C4DFE6; --cell-border: #66A5AD; --cell-hover-bg: #a9c7d0; --button-bg: #66A5AD; --button-text: #003B46; --status-text: #E6F5F7; --info-text: #96E6B3; --winning-cell-bg: #96E6B3;}
+        .theme-sunset { --bg-color: #2C2C54; --text-color: #F5F5F5; --container-bg: #474787; --cell-bg: #F7B733; --cell-border: #FC4A1A; --cell-hover-bg: #f8c75f; --button-bg: #FC4A1A; --button-text: #F5F5F5; --status-text: #F5F5F5; --info-text: #A1C4FD; --winning-cell-bg: #A1C4FD;}
+        .theme-rose { --bg-color: #fadadd; --text-color: #5c3c43; --container-bg: #fff0f1; --cell-bg: #ffffff; --cell-border: #f8b0c0; --cell-hover-bg: #fce4e8; --button-bg: #e75480; --button-text: #ffffff; --status-text: #5c3c43; --info-text: #d94f70; --winning-cell-bg: #f8b0c0;}
+        
+        /* --- GENERAL & RESPONSIVE SETUP --- */
+        body {
+            font-family: 'Poppins', sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; padding: 10px; box-sizing: border-box;
+            background-color: var(--bg-color); color: var(--text-color);
+            transition: background-color 0.5s, color 0.5s; overflow: hidden;
+        }
+        .hidden { display: none !important; }
+
+        /* --- PROFESSIONAL SPLASH SCREEN --- */
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #121212; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 100; opacity: 1; transition: opacity 0.5s ease-out;
+        }
+        #splash-screen.fade-out { opacity: 0; }
+        .splash-title {
+            font-family: 'Orbitron', sans-serif; font-size: 3rem; color: #fff;
+            letter-spacing: 5px; text-shadow: 0 0 10px #03dac6, 0 0 20px #03dac6, 0 0 30px #bb86fc;
+            opacity: 0; animation: fadeInText 1.5s ease 0.2s forwards;
+            text-align: center;
+        }
+        .loader-bar { width: 250px; height: 10px; border: 1px solid #03dac6; border-radius: 5px; margin: 20px auto 0; overflow: hidden; }
+        .loader-progress { width: 0%; height: 100%; background: linear-gradient(90deg, #bb86fc, #03dac6); border-radius: 5px; animation: loading 2s ease-in-out 0.5s forwards; }
+        @keyframes fadeInText { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes loading { from { width: 0%; } to { width: 100%; } }
+
+        /* --- GAME OVER ANIMATION SCREEN --- */
+        #game-over-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 50;
+            opacity: 0; animation: fadeIn 0.5s forwards;
+        }
+        #game-over-message {
+            font-family: 'Orbitron', sans-serif; font-size: 4rem;
+            transform: scale(0.5); animation: scaleUp 0.5s 0.3s forwards;
+        }
+        #game-over-message.win-style { color: var(--win-color); text-shadow: 0 0 15px var(--win-color); }
+        #game-over-message.lose-style { color: var(--lose-color); text-shadow: 0 0 15px var(--lose-color); }
+        #game-over-message.draw-style { color: var(--draw-color); }
+        #play-again-btn { margin-top: 30px; opacity: 0; animation: fadeInText 0.5s 0.8s forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleUp { from { transform: scale(0.5); } to { transform: scale(1); } }
+
+        /* --- MAIN CONTAINER & GAME --- */
+        #main-container {
+            display: flex; gap: 20px; align-items: flex-start;
+            width: 100%; max-width: 1200px; justify-content: center;
+        }
+        #game-wrapper { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        #game-container {
+            text-align: center; background: var(--container-bg); padding: 20px 40px;
+            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: background-color 0.5s;
+        }
+        h1#game-title { color: var(--text-color); font-family: 'Poppins', sans-serif; }
+        #board {
+            display: grid; grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px); gap: 5px; margin-top: 20px;
+        }
+        .cell {
+            width: 100px; height: 100px; background-color: var(--cell-bg);
+            border: 2px solid var(--cell-border); border-radius: 5px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 3.5rem; cursor: pointer; user-select: none;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .cell:hover:not(:empty) { cursor: not-allowed; }
+        .cell:hover:empty { background-color: var(--cell-hover-bg); transform: scale(1.05); }
+        .winning-cell {
+            background-color: var(--winning-cell-bg);
+            animation: spin 1s linear; color: black !important;
+        }
+        @keyframes spin { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+
+        /* --- MENUS, SETTINGS, CHAT, ETC. --- */
+        #status { margin-top: 20px; font-size: 1.5rem; min-height: 50px; font-weight: bold; }
+        .menu, #settings-container {
+            background: var(--container-bg); padding: 20px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center;
+            width: 100%; max-width: 400px; box-sizing: border-box;
+        }
+        #main-menu h1 { font-family: 'Orbitron', sans-serif; letter-spacing: 2px; }
+        #main-menu p { font-size: 1.2rem; margin-bottom: 20px; }
+        
+        .menu-button, .menu input, .menu button, #settings-container select {
+            padding: 12px 20px; font-size: 1.1rem; margin: 8px 5px;
+            border-radius: 5px; border: 1px solid var(--cell-border);
+            width: 90%; max-width: 300px; box-sizing: border-box; background-color: var(--cell-bg); color: var(--text-color);
+        }
+        .menu-button, .menu button {
+            background-color: var(--button-bg); color: var(--button-text);
+            cursor: pointer; border: none; transition: all 0.2s ease-in-out;
+            font-weight: bold; text-transform: uppercase; letter-spacing: 1px;
+            display: block; margin-left: auto; margin-right: auto;
+        }
+        .menu-button:hover, .menu button:hover { opacity: 0.9; transform: scale(1.03); }
+        
+        #room-info { font-size: 1.2rem; color: var(--info-text); font-weight: bold; margin-top: 15px; word-break: break-all; }
+        #chat-container {
+            width: 300px; height: 508px; /* Adjusted height */
+            background: var(--container-bg);
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; padding: 10px;
+        }
+        #chat-messages { flex-grow: 1; overflow-y: auto; padding: 10px; border-bottom: 1px solid var(--cell-border); margin-bottom: 10px; }
+        .chat-message { padding: 8px; margin-bottom: 8px; border-radius: 7px; max-width: 80%; word-wrap: break-word; }
+        .my-message { background-color: var(--button-bg); color: var(--button-text); margin-left: auto; text-align: right; }
+        .opponent-message { background-color: var(--cell-hover-bg); color: var(--text-color); margin-right: auto; }
+        #chat-input-area { display: flex; }
+        #chat-input { flex-grow: 1; padding: 10px; border: 1px solid var(--cell-border); border-radius: 5px 0 0 5px; }
+        #send-chat-btn { padding: 10px; background-color: var(--button-bg); color: var(--button-text); border: none; cursor: pointer; border-radius: 0 5px 5px 0; }
+        
+        /* --- MOBILE RESPONSIVENESS --- */
+        @media (max-width: 768px) {
+            body { padding: 5px; overflow-y: auto; }
+            h1#game-title { font-size: 1.5rem; }
+            .splash-title { font-size: 2rem; }
+            #game-over-message { font-size: 2.5rem; }
+            #main-container { flex-direction: column; align-items: center; gap: 15px; }
+            #game-container { padding: 15px; }
+            #board {
+                width: 90vw; max-width: 320px; height: 90vw; max-height: 320px;
+                grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 3px;
+            }
+            .cell { width: 100%; height: 100%; font-size: 10vw; max-font-size: 3rem; }
+            #status { font-size: 1.1rem; }
+            .menu-button, .menu input, .menu button, #settings-container select { width: 100%; max-width: 300px; }
+            #chat-container { width: 90vw; max-width: 400px; height: 35vh; min-height: 250px; }
+        }
+    </style>
+</head>
+<body class="theme-dark">
+
+    <div id="splash-screen">
+        <div class="splash-content">
+            <h1 class="splash-title">Tic Tac Toe<br>Universe</h1>
+            <div class="loader-bar"><div class="loader-progress"></div></div>
+        </div>
+    </div>
+    
+    <div id="game-over-overlay" class="hidden">
+        <h2 id="game-over-message"></h2>
+        <button id="play-again-btn" class="menu-button">Play Again?</button>
+    </div>
+
+    <div id="main-menu" class="menu hidden">
+        <h1>Tic Tac Toe Universe</h1>
+        <p>Choose your game mode:</p>
+        <button class="menu-button" id="play-online-btn">Play with a Friend Online</button>
+        <button class="menu-button" id="play-cpu-btn">Play against Computer</button>
+    </div>
+
+    <div id="main-container" class="hidden">
+        <div id="game-wrapper">
+            <div id="settings-container">
+                <label for="theme-select">Theme: </label>
+                <select id="theme-select">
+                    <option value="theme-dark" selected>Dark</option><option value="theme-light">Light</option>
+                    <option value="theme-forest">Forest</option><option value="theme-ocean">Ocean</option>
+                    <option value="theme-sunset">Sunset</option><option value="theme-rose">Rose</option>
+                </select>
+                <br>
+                <label for="marker-select">My Marker: </label>
+                <select id="marker-select">
+                    <option>X</option><option>O</option><option>👺</option><option>🥸</option><option>👻</option>
+                    <option>💖</option><option>👹</option><option>🥳</option><option>😈</option><option>👽</option>
+                </select>
+                <div id="cpu-marker-setting" class="hidden"><br>
+                    <label for="cpu-marker-select">CPU Marker: </label>
+                    <select id="cpu-marker-select">
+                        <option>🤖</option><option>O</option><option>X</option><option>🤡</option><option>👾</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div id="game-container">
+                <h1 id="game-title">Tic Tac Toe</h1>
+                <div id="room-setup" class="menu hidden">
+                    <button id="createRoomBtn" class="menu-button">Create Room</button>
+                    <br>
+                    <input type="text" id="roomInput" placeholder="Enter Room Code">
+                    <button id="joinRoomBtn" class="menu-button">Join Room</button>
+                </div>
+                <div id="room-info"></div>
+                <div id="status">Welcome!</div>
+                <div id="board" class="hidden">
+                    <div class="cell" data-index="0"></div><div class="cell" data-index="1"></div><div class="cell" data-index="2"></div>
+                    <div class="cell" data-index="3"></div><div class="cell" data-index="4"></div><div class="cell" data-index="5"></div>
+                    <div class="cell" data-index="6"></div><div class="cell" data-index="7"></div><div class="cell" data-index="8"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-container" class="hidden">
+            <div id="chat-messages"></div>
+            <div id="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="send-chat-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GAME STATE, DOM, & SOUNDS ---
+        let boardState = Array(9).fill('');
+        let currentPlayer, gameActive = false, mySymbol = 'X', opponentSymbol = 'O';
+        let roomID = '', topic = '', gameMode = '', clientID = 'tictactoe-player-' + Math.random().toString(16).substr(2, 8);
+        let isPlayerOne = false; // Player who creates the room is Player One
+
+        const dom = {
+            status: document.getElementById('status'), board: document.getElementById('board'),
+            cells: document.querySelectorAll('.cell'), roomSetup: document.getElementById('room-setup'),
+            roomInfo: document.getElementById('room-info'), splash: document.getElementById('splash-screen'),
+            mainMenu: document.getElementById('main-menu'), mainContainer: document.getElementById('main-container'),
+            chat: { container: document.getElementById('chat-container'), messages: document.getElementById('chat-messages'), input: document.getElementById('chat-input') },
+            markerSelect: document.getElementById('marker-select'),
+            cpuMarkerSelect: document.getElementById('cpu-marker-select'), cpuMarkerSetting: document.getElementById('cpu-marker-setting'),
+            gameOver: { overlay: document.getElementById('game-over-overlay'), message: document.getElementById('game-over-message') }
+        };
+
+        // Base64 sounds to keep it in one file
+        const sounds = {
+            click: new Audio("data:audio/mpeg;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUIAAABvT19/P/8/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v-"),
+            win: new Audio("data:audio/mpeg;base64,UklGRigBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQBAADi/wb/Kf7q/hL9y/wM/jr9Gv5r/fT/N/5L/m78lvyV/Jn7k/zV/O/9s/jD/vv68/oV+m/5r/cZ+l33X/M483/1b/Lq8LbyAfPo8wL0FvR680L34vYk93X6NfvW/Cr/Y/0//lH8lfyF/K/9d/2J/oP/t/s9/CX6SPpW+8r8L/9M/k395vsa+wH84v3a/h3/T/0b/S/8iPzA/b79u/5h/pT93/13/A//S/5l/Qn+C/8l/qD9jP7e/oH/lQBqAG8BjQGCAZkAVwDHALb+p/4q/gD87f2l/G399f1w+lH6SPpQ+Q37/vvM/FL8LvtO+jT5Jvga+Br4gfcA+3/6K/yY/bT/8v+p/rT+Yf2r/Xb9B/17/Wf9Nf0T/bL+8P9jAEMBcgGGAZ8BvgJ2ArwD9gQ+BdUGzQdHCY8JEwqPCY8HhAaXBG0DCwFmAXoAf//u/V792vxt/H/8Fv4p/m/99P3g/aX81/qK+Vn5z/d5+L76b/uV/P3+Ev9u/tH9zP6C/jL9tP34/U/91f+8ADICzAK7AmsD+AIjA7oAnADm/9T+Bv+u/vH+Qv8g/1f/9v4Z/oX7C/lX99b2n/Vn9d/2qPhG+dD6iP3Q/vD/1v/e/9oAZgK0BE0GOwaaBpAGfQY+B5QHyQhrCA8Lpgo8DDUObg6mDt8NSwxmCfkH/QU4At0Ah/4K/e37uPuQ+pT7i/iW+9f6Yv9R/7389/cO9fXzmvM883/ztfF78pjyTPIV8wT1ufQo+O/8qQDyAeQDgAZOCw0TNxwGH5QjwAIsAowA2P8X/V7+8AA5Az0FCwU4BTQF8gLgAPL+z/zG/dL/4wC+AT8FwggFDsQOoxZ4F1AFegR0AkH+vvw3+yb5tPhE9/z0GfQC84TwBPAJ7t/qXOnI5M/kXOVX50Xp4+7X/5cD4w+rJpQ2n0qQUQY86k78IqgW0AGW9r73Q/i37kL1sPH36y7jWd4W1RjJncWkw+nAiL2YtLOnrKmuoqSjp6aaoJmOiYl/e3eDe4N7gn+KeZt+k4GDfoWChX+Dfod/in2UgZGDm4Obh5eIk4mViJWImYyYjpODk4WRi4iJg3p5dHFsbmxqbW1rbm9ubm9vcHFxcXFxc3NxcHFxdHR0cnJycnJycnJycnJzcnJyc3Jzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N-"),
+            lose: new Audio("data:audio/mpeg;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQACAACAgP/+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v-"),
+            draw: new Audio("data:audio/mpeg;base64,UklGRiICAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAgAAAAPz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/P-"),
+            notify: new Audio("data:audio/mpeg;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUIAAABvT19/P/8/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v-")
+        };
+        function playSound(soundName) {
+            if (sounds[soundName]) {
+                sounds[soundName].currentTime = 0;
+                sounds[soundName].play().catch(e => {}); // Ignore play interruption errors
+            }
+        }
+
+        // --- MQTT CLIENT ---
+        const client = new Paho.MQTT.Client('broker.hivemq.com', 8000, clientID);
+        client.onConnectionLost = responseObject => { if (responseObject.errorCode !== 0) { dom.status.textContent = 'Connection lost. Please refresh.'; gameActive = false; } };
+        client.onMessageArrived = onMessageArrived;
+
+        // --- INITIALIZATION & GAME FLOW ---
+        window.onload = () => {
+            setTimeout(() => {
+                dom.splash.classList.add('fade-out');
+                setTimeout(() => {
+                    dom.splash.classList.add('hidden');
+                    dom.mainMenu.classList.remove('hidden');
+                    document.body.style.overflow = 'auto';
+                }, 500);
+            }, 3000);
+        };
+
+        function setupGame(mode) {
+            playSound('click');
+            gameMode = mode;
+            mySymbol = dom.markerSelect.value;
+            dom.mainMenu.classList.add('hidden');
+            dom.mainContainer.classList.remove('hidden');
+
+            if (mode === 'online') {
+                dom.cpuMarkerSetting.classList.add('hidden');
+                dom.roomSetup.classList.remove('hidden');
+                dom.chat.container.classList.remove('hidden');
+                dom.status.textContent = 'Create or join a room to play online.';
+            } else { // CPU mode
+                dom.cpuMarkerSetting.classList.remove('hidden');
+                opponentSymbol = dom.cpuMarkerSelect.value;
+                dom.roomSetup.classList.add('hidden');
+                dom.chat.container.classList.add('hidden');
+                dom.board.classList.remove('hidden');
+                restartGame();
+            }
+        }
+
+        // --- MQTT FUNCTIONS ---
+        function connectToBroker(onConnectCallback) { 
+            if (client.isConnected()) {
+                if (onConnectCallback) onConnectCallback();
+                return;
+            }
+            client.connect({ onSuccess: () => { console.log('Connected to MQTT broker!'); if (onConnectCallback) onConnectCallback(); }, onFailure: () => dom.status.textContent = 'Could not connect to server.' }); 
+        }
+
+        function onMessageArrived(message) {
+            const data = JSON.parse(message.payloadString);
+            if (data.senderID === clientID) return; // Ignore our own messages
+
+            switch(data.type) {
+                case 'join_request': // For Player 1 (creator)
+                    if (isPlayerOne) {
+                        opponentSymbol = data.symbol;
+                        gameActive = true;
+                        currentPlayer = mySymbol; // Creator always starts
+                        dom.status.textContent = `Player ${opponentSymbol} joined. Your turn (${mySymbol}).`;
+                        sendMessage({ type: 'game_start', creatorSymbol: mySymbol, turn: currentPlayer });
+                    }
+                    break;
+                case 'game_start': // For Player 2 (joiner)
+                    if (!isPlayerOne) {
+                        opponentSymbol = data.creatorSymbol;
+                        gameActive = true;
+                        currentPlayer = data.turn; // Turn is determined by creator
+                        dom.status.textContent = `Game started. Waiting for ${opponentSymbol}'s move.`;
+                    }
+                    break;
+                case 'move':
+                    if (gameActive) {
+                        playSound('click');
+                        updateCell(data.cellIndex, opponentSymbol);
+                        const gameResult = checkWinner();
+                        if (gameResult.isOver) {
+                            handleGameOver(gameResult.winner === 'draw' ? 'draw' : 'lose');
+                        } else {
+                            currentPlayer = mySymbol;
+                            dom.status.textContent = `Your turn (${mySymbol})`;
+                        }
+                    }
+                    break;
+                case 'chat': 
+                    playSound('notify'); 
+                    displayChatMessage(data.text, 'opponent'); 
+                    break;
+                case 'restart_request':
+                    if (confirm(`Opponent wants to play again. Agree?`)) {
+                        sendMessage({ type: 'restart_confirm' });
+                        restartGame();
+                    }
+                    break;
+                case 'restart_confirm': 
+                    alert('Opponent agreed. New game!'); 
+                    restartGame();
+                    break;
+            }
+        }
+        
+        function sendMessage(payload) { 
+            payload.senderID = clientID; 
+            const message = new Paho.MQTT.Message(JSON.stringify(payload));
+            message.destinationName = topic;
+            client.send(message);
+        }
+
+        // --- ONLINE ROOM SETUP ---
+        function createRoom() {
+            playSound('click');
+            isPlayerOne = true;
+            roomID = Math.random().toString(36).substr(2, 5).toUpperCase();
+            topic = `tictactoe/universe/${roomID}`;
+            mySymbol = dom.markerSelect.value;
+            connectToBroker(() => {
+                client.subscribe(topic);
+                dom.roomSetup.classList.add('hidden');
+                dom.board.classList.remove('hidden');
+                dom.roomInfo.innerHTML = `Room Code: <b>${roomID}</b> (Share with a friend)`;
+                dom.status.textContent = `Waiting for an opponent to join...`;
+            });
+        }
+        function joinRoom() {
+            playSound('click');
+            roomID = document.getElementById('roomInput').value.trim().toUpperCase();
+            if (!roomID) { alert('Please enter a room code.'); return; }
+            
+            isPlayerOne = false;
+            topic = `tictactoe/universe/${roomID}`;
+            mySymbol = dom.markerSelect.value;
+
+            connectToBroker(() => {
+                client.subscribe(topic, {
+                    onSuccess: () => {
+                        sendMessage({ type: 'join_request', symbol: mySymbol });
+                        dom.roomSetup.classList.add('hidden');
+                        dom.board.classList.remove('hidden');
+                        dom.roomInfo.innerHTML = `Joined Room: <b>${roomID}</b>`;
+                        dom.status.textContent = 'Successfully joined. Waiting for game to start...';
+                    }
+                });
+            });
+        }
+        
+        // --- CORE GAME LOGIC ---
+        const winningConditions = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+        
+        function checkWinner() {
+            let roundWon = false, winningCombo = [];
+            for (const winCondition of winningConditions) {
+                let a = boardState[winCondition[0]], b = boardState[winCondition[1]], c = boardState[winCondition[2]];
+                if (a && a === b && a === c) { roundWon = true; winningCombo = winCondition; break; }
+            }
+            if (roundWon) {
+                gameActive = false;
+                winningCombo.forEach(index => dom.cells[index].classList.add('winning-cell'));
+                return { isOver: true, winner: boardState[winningCombo[0]] };
+            }
+            if (!boardState.includes('')) {
+                gameActive = false;
+                return { isOver: true, winner: 'draw' };
+            }
+            return { isOver: false };
+        }
+        
+        function handleCellClick(event) {
+            const index = parseInt(event.target.getAttribute('data-index'));
+            if (boardState[index] !== '' || !gameActive || currentPlayer !== mySymbol) return;
+            
+            playSound('click');
+            updateCell(index, mySymbol);
+            
+            if (gameMode === 'online') {
+                sendMessage({ type: 'move', cellIndex: index });
+            }
+
+            const gameResult = checkWinner();
+            if (gameResult.isOver) {
+                handleGameOver(gameResult.winner === 'draw' ? 'draw' : 'win');
+            } else {
+                currentPlayer = opponentSymbol;
+                dom.status.textContent = `Waiting for ${currentPlayer}'s turn...`;
+                if (gameMode === 'cpu') {
+                    dom.board.style.pointerEvents = 'none';
+                    setTimeout(() => { 
+                        cpuMove(); 
+                        dom.board.style.pointerEvents = 'auto'; 
+                    }, 800);
+                }
+            }
+        }
+        
+        function updateCell(index, player) { 
+            boardState[index] = player; 
+            dom.cells[index].textContent = player; 
+        }
+        
+        // --- CPU, GAME OVER, RESTART LOGIC ---
+        function cpuMove() {
+            opponentSymbol = dom.cpuMarkerSelect.value; // Make sure CPU symbol is up-to-date
+            let availableCells = boardState.map((c, i) => c === '' ? i : null).filter(i => i !== null);
+            if(availableCells.length > 0) {
+                const cpuChoice = availableCells[Math.floor(Math.random() * availableCells.length)];
+                updateCell(cpuChoice, opponentSymbol);
+                playSound('click');
+
+                const gameResult = checkWinner();
+                if(gameResult.isOver){
+                     handleGameOver(gameResult.winner === 'draw' ? 'draw' : 'lose');
+                } else {
+                    currentPlayer = mySymbol;
+                    dom.status.textContent = `Your turn (${mySymbol})`;
+                }
+            }
+        }
+
+        function handleGameOver(result) {
+            gameActive = false;
+            let message = '', styleClass = '';
+            if (result === 'win') {
+                message = "YOU WIN!"; styleClass = 'win-style'; playSound('win');
+            } else if (result === 'lose') {
+                message = "YOU LOSE"; styleClass = 'lose-style'; playSound('lose');
+            } else {
+                message = "IT'S A DRAW"; styleClass = 'draw-style'; playSound('draw');
+            }
+            dom.gameOver.message.textContent = message;
+            dom.gameOver.message.className = styleClass;
+            dom.gameOver.overlay.classList.remove('hidden');
+        }
+
+        function restartGame() {
+            playSound('click');
+            boardState.fill(''); 
+            gameActive = true;
+            dom.gameOver.overlay.classList.add('hidden');
+            dom.cells.forEach(cell => { cell.textContent = ''; cell.classList.remove('winning-cell'); });
+            
+            if (gameMode === 'cpu') {
+                mySymbol = dom.markerSelect.value;
+                opponentSymbol = dom.cpuMarkerSelect.value;
+                currentPlayer = mySymbol; // Player always starts against CPU
+                dom.status.textContent = `New Game vs CPU. Your turn (${mySymbol}).`;
+            } else { // Online mode
+                // The creator (Player One) always starts the new game
+                currentPlayer = isPlayerOne ? mySymbol : opponentSymbol;
+                 if (isPlayerOne) {
+                    dom.status.textContent = `New Game! Your turn (${mySymbol}).`;
+                 } else {
+                    dom.status.textContent = `New Game! Waiting for ${opponentSymbol}...`;
+                 }
+            }
+        }
+        
+        // --- CHAT LOGIC ---
+        function displayChatMessage(text, type) {
+            const msgEl = document.createElement('div');
+            msgEl.classList.add('chat-message', type === 'my' ? 'my-message' : 'opponent-message');
+            msgEl.textContent = text;
+            dom.chat.messages.appendChild(msgEl);
+            dom.chat.messages.scrollTop = dom.chat.messages.scrollHeight;
+        }
+
+        function sendChatMessage() {
+            const text = dom.chat.input.value.trim();
+            if (text && gameMode === 'online' && client.isConnected()) {
+                displayChatMessage(text, 'my');
+                sendMessage({ type: 'chat', text: text });
+                dom.chat.input.value = '';
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('play-online-btn').addEventListener('click', () => setupGame('online'));
+        document.getElementById('play-cpu-btn').addEventListener('click', () => setupGame('cpu'));
+        document.getElementById('createRoomBtn').addEventListener('click', createRoom);
+        document.getElementById('joinRoomBtn').addEventListener('click', joinRoom);
+        document.getElementById('play-again-btn').addEventListener('click', () => {
+             if (gameMode === 'online') {
+                sendMessage({ type: 'restart_request' });
+                dom.gameOver.overlay.classList.add('hidden');
+                dom.status.textContent = 'Restart request sent. Waiting for opponent...';
+             } else {
+                restartGame();
+             }
+        });
+        document.getElementById('theme-select').addEventListener('change', (e) => document.body.className = e.target.value);
+        document.getElementById('marker-select').addEventListener('change', (e) => { 
+            if (!gameActive) mySymbol = e.target.value; 
+        });
+        dom.cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+        document.getElementById('send-chat-btn').addEventListener('click', sendChatMessage);
+        dom.chat.input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+    </script>
+</body>
+</html>
